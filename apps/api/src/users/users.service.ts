@@ -7,37 +7,46 @@ import {
   UserProfile,
 } from '@cigaro/libs';
 import { ClubMember } from '@prisma/client';
+import { ErrorManager } from '../common/errors/error-manager';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async getAllUsersForAdmin(): Promise<User[]> {
-    return this.prisma.user.findMany();
+    return this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
   }
 
   async getAllPublicUsers(viewerId?: string): Promise<PublicUserProfile[]> {
     const users: (User & { memberships: ClubMember[] })[] = await this.prisma.user.findMany({
-      include: { memberships: { where: { status: 'ACTIVE' } } }
+      where: { status: 'ACTIVE' },
+      include: { memberships: { where: { status: 'ACTIVE' } } },
+      take: 100,
+      orderBy: { createdAt: 'desc' },
     });
 
     return Promise.all(
-      users.map((user: User & { memberships: ClubMember[] }): Promise<PublicUserProfile> => this.getPublicUserProfile(user.id, viewerId))
+      users.map((user: User & { memberships: ClubMember[] }): Promise<PublicUserProfile> =>
+        this.getPublicUserProfile(user.id, viewerId)
+      )
     );
   }
 
   async getUserProfile(userId: string): Promise<UserProfile> {
     const user: (User & { memberships: ClubMember[] }) | null = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, status: 'ACTIVE' },
       include: {
         memberships: {
           where: { status: 'ACTIVE' }
         }
-      }
+      },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      ErrorManager.userNotFound(userId);
     }
 
     return {
@@ -53,14 +62,14 @@ export class UsersService {
     viewerUserId?: string
   ): Promise<PublicUserProfile> {
     const user: (User & { memberships: ClubMember[] }) | null = await this.prisma.user.findUnique({
-      where: { id: targetUserId },
+      where: { id: targetUserId, status: 'ACTIVE' },
       include: {
         memberships: { where: { status: 'ACTIVE' } }
       }
     });
 
     if (!user) {
-      throw new Error('User not found');
+      ErrorManager.userNotFound(targetUserId);
     }
 
     const privacy = user.privacySettings as unknown as PrivacySettingsModel;
@@ -88,6 +97,7 @@ export class UsersService {
       rank: privacy.show_rank ? user.rank : 'INITIE',
       xp: privacy.show_rank ? user.xp : 0,
       joinedClubsCount: privacy.show_clubs ? user.memberships.length : 0,
+      status: user.status || null,
       isClubMate
     };
   }

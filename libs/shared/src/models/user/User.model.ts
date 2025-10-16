@@ -17,7 +17,8 @@ export interface PublicUserProfile {
   rank: UserRank;
   xp: number;                // Selon privacy_settings.show_rank
   joinedClubsCount: number;  // Selon privacy_settings.show_clubs
-  isClubMate: boolean;       // True si dans un club commun
+  status: UserStatus;        // AJOUTÉ
+  isClubMate: boolean;       // AJOUTÉ - True si dans un club commun
 }
 
 export type UserStatus = $Enums.UserStatus;

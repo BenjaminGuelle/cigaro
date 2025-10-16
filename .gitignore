@@ -5,6 +5,9 @@ dist
 tmp
 out-tsc
 
+# documents
+/documents/supabase.md
+
 # dependencies
 node_modules
 
@@ -44,3 +47,5 @@ Thumbs.db
 .github/instructions/nx.instructions.md
 
 .angular
+
+/generated/prisma

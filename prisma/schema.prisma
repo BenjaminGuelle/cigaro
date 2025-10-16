@@ -1,0 +1,442 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String  @unique @db.VarChar(255)
+  firstName   String? @map("first_name") @db.VarChar(100)
+  lastName    String? @map("last_name") @db.VarChar(100)
+  pseudo      String? @unique @db.VarChar(50)
+  avatarUrl   String? @map("avatar_url")
+
+  // Localisation (optionnelle, pour recherche clubs proximité)
+  address     Json?   @db.JsonB
+
+  // Status (remplace "active" boolean)
+  status      UserStatus @default(ACTIVE)
+
+  // Rôle plateforme (admin système)
+  userRole    UserRole @default(USER) @map("user_role")
+
+  // Abonnement SOLO (indépendant des clubs)
+  soloPlan    PlanType @default(FREE) @map("solo_plan")
+  soloSubscriptionId String? @map("solo_subscription_id") @db.VarChar(255)
+
+  // 🎯 ADMIN PREMIUM FLAGS
+  isAdminPremium      Boolean @default(false) @map("is_admin_premium")
+  adminPremiumNote    String? @map("admin_premium_note")
+
+  // Gamification
+  rank        UserRank @default(INITIE)
+  xp          Int      @default(0)
+
+  // Privacy
+  privacySettings Json @default("{\"profile_public\": true, \"email_visible\": false, \"show_rank\": true, \"show_tastings_count\": true, \"show_clubs\": true, \"show_location\": false}") @map("privacy_settings") @db.JsonB
+
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  ownedClubs     Club[]          @relation("ClubOwner")
+  memberships    ClubMember[]
+  createdEvents  Event[]         @relation("EventCreator")
+  hostedEvents   Event[]         @relation("EventHost")
+  eventRsvps     EventRsvp[]
+  tastings       Tasting[]
+  comments       Comment[]
+
+  @@index([email])
+  @@index([pseudo])
+  @@index([status])
+  @@index([userRole], map: "idx_users_user_role")
+  @@index([soloPlan], map: "idx_users_solo_plan")
+  @@index([isAdminPremium], map: "idx_users_admin_premium")
+  @@map("users")
+}
+
+model Club {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String    @db.VarChar(100)
+  description      String?
+  logoUrl          String?   @map("logo_url")
+  coverPhotoUrl    String?   @map("cover_photo_url")
+  contactEmail     String?   @map("contact_email") @db.VarChar(255)
+  ownerId          String    @map("owner_id") @db.Uuid
+
+  // Adresse (lieu par défaut des événements)
+  address          Json?     @db.JsonB
+
+  // Abonnement CLUB
+  clubPlan         ClubPlanType @default(FREE) @map("club_plan")
+  clubSubscriptionId String?  @map("club_subscription_id") @db.VarChar(255)
+
+  // 🎯 ADMIN PREMIUM FLAGS
+  isAdminPremium   Boolean   @default(false) @map("is_admin_premium")
+  adminPremiumNote String?   @map("admin_premium_note")
+
+  // Dénormalisation pour performance
+  memberCount      Int       @default(0) @map("member_count")
+
+  // Visibilité
+  invitationCode   String?   @unique @map("invitation_code") @db.VarChar(20)
+  isPublic         Boolean   @default(true) @map("is_public")
+
+  // Metadata
+  foundedAt        DateTime? @map("founded_at") @db.Date
+  settings         Json      @default("{}") @db.JsonB
+
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  owner         User          @relation("ClubOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members       ClubMember[]
+  events        Event[]
+  tastings      Tasting[]
+
+  @@index([ownerId], map: "idx_clubs_owner")
+  @@index([invitationCode], map: "idx_clubs_invitation_code")
+  @@index([isPublic], map: "idx_clubs_is_public")
+  @@index([clubPlan], map: "idx_clubs_club_plan")
+  @@index([memberCount], map: "idx_clubs_member_count")
+  @@index([isAdminPremium], map: "idx_clubs_admin_premium")
+  @@map("clubs")
+}
+
+model ClubMember {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  clubId         String            @map("club_id") @db.Uuid
+  role           ClubRole
+  functionalRole ClubFunctionalRole? @map("functional_role")
+  status         ClubMemberStatus   @default(INVITED)
+  joinedAt       DateTime          @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@index([userId], map: "idx_club_members_user")
+  @@index([clubId], map: "idx_club_members_club")
+  @@index([role], map: "idx_club_members_role")
+  @@index([status], map: "idx_club_members_status")
+  @@map("club_members")
+}
+
+model Event {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clubId            String    @map("club_id") @db.Uuid
+  title             String    @db.VarChar(200)
+  description       String?
+  photoUrl          String?   @map("photo_url")
+
+  // Lieu de l'événement
+  locationType      LocationType @default(CUSTOM) @map("location_type")
+  locationHostId    String?   @map("location_host_id") @db.Uuid
+  locationName      String    @map("location_name") @db.VarChar(200)
+  locationAddress   Json      @map("location_address") @db.JsonB
+  addressVisibleTo  AddressVisibility @default(CONFIRMED_ONLY) @map("address_visible_to")
+  locationNotes     String?   @map("location_notes")
+
+  // Date et contraintes
+  eventDate         DateTime  @map("event_date") @db.Timestamptz(6)
+  durationMinutes   Int       @default(180) @map("duration_minutes")
+  maxParticipants   Int?      @map("max_participants")
+
+  // Visibilité et status
+  visibility        EventVisibility @default(MEMBERS_ONLY)
+  status            EventStatus @default(UPCOMING)
+
+  // Relations vers RSVP (table séparée)
+  rsvps             EventRsvp[]
+  tastings          Tasting[]
+
+  // Audit
+  createdBy         String    @map("created_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  club              Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  creator           User      @relation("EventCreator", fields: [createdBy], references: [id])
+  locationHost      User?     @relation("EventHost", fields: [locationHostId], references: [id])
+
+  @@index([clubId], map: "idx_events_club")
+  @@index([eventDate], map: "idx_events_date")
+  @@index([status], map: "idx_events_status")
+  @@index([visibility], map: "idx_events_visibility")
+  @@index([createdBy], map: "idx_events_created_by")
+  @@index([locationHostId], map: "idx_events_location_host")
+  @@map("events")
+}
+
+model EventRsvp {
+  id       String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId  String     @map("event_id") @db.Uuid
+  userId   String     @map("user_id") @db.Uuid
+  status   RsvpStatus @default(MAYBE)
+  notes    String?
+  joinedAt DateTime   @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId], map: "idx_event_rsvps_event")
+  @@index([userId], map: "idx_event_rsvps_user")
+  @@index([status], map: "idx_event_rsvps_status")
+  @@map("event_rsvps")
+}
+
+model Tasting {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  clubId      String? @map("club_id") @db.Uuid
+  eventId     String? @map("event_id") @db.Uuid
+
+  // Identification cigare
+  cigarName   String  @map("cigar_name") @db.VarChar(200)
+  cigarBrand  String? @map("cigar_brand") @db.VarChar(100)
+  vitola      String? @db.VarChar(100)
+
+  // Rating avec demi-points - Float plus simple que Decimal
+  rating      Float
+
+  // Mode évaluation
+  isExpertMode Boolean @default(false) @map("is_expert_mode")
+
+  // === MODE QUICK (toujours rempli) ===
+  aromas      String[] // Codes aromas basiques
+  tastingNotes String? @map("tasting_notes")
+
+  // === MODE EXPERT (optionnel) ===
+
+  // Contexte
+  smokedAt         DateTime? @map("smoked_at") @db.Timestamptz(6)
+  durationMinutes  Int?      @map("duration_minutes")
+  moment          String?   @db.VarChar(50)
+  situation       String?   @db.VarChar(50)
+  pairing         String?   @db.VarChar(200)
+
+  // Avant allumage
+  capeAspect String? @map("cape_aspect") @db.VarChar(50)
+  capeColor  String? @map("cape_color") @db.VarChar(50)
+  touch      String? @db.VarChar(50)
+
+  // Fumage à cru
+  rawSmokeTastes String[] @map("raw_smoke_tastes")
+  rawSmokeAromas String[] @map("raw_smoke_aromas")
+
+  // Dégustation détaillée (grille FOIN-DIVIN-PURIN)
+  tastesHay     String[] @map("tastes_hay")
+  tastesDivine  String[] @map("tastes_divine")
+  tastesManure  String[] @map("tastes_manure")
+  aromasHay     String[] @map("aromas_hay")
+  aromasDivine  String[] @map("aromas_divine")
+  aromasManure  String[] @map("aromas_manure")
+
+  // Caractéristiques techniques
+  bodyStrength         String? @map("body_strength") @db.VarChar(50)
+  aromaVariety         String? @map("aroma_variety") @db.VarChar(50)
+  draw                 String? @db.VarChar(50)
+  terroir              String? @db.VarChar(50)
+  balance              String? @db.VarChar(50)
+  ashNature            String? @map("ash_nature") @db.VarChar(50)
+  finalImpression      String? @map("final_impression") @db.VarChar(50)
+  aromaticPersistence  String? @map("aromatic_persistence") @db.VarChar(50)
+
+  // Media
+  photos String[]
+
+  // Visibilité
+  visibility TastingVisibility @default(PRIVATE)
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club  Club?  @relation(fields: [clubId], references: [id], onDelete: SetNull)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_tastings_user")
+  @@index([clubId], map: "idx_tastings_club")
+  @@index([eventId], map: "idx_tastings_event")
+  @@index([cigarName], map: "idx_tastings_cigar_name")
+  @@index([rating], map: "idx_tastings_rating")
+  @@index([isExpertMode], map: "idx_tastings_mode")
+  @@index([visibility], map: "idx_tastings_visibility")
+  @@index([createdAt], map: "idx_tastings_created")
+  @@map("tastings")
+}
+
+model Post {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorType   AuthorType  @map("author_type")
+  authorId     String      @map("author_id") @db.Uuid
+
+  title        String?     @db.VarChar(200)
+  content      String
+  photos       String[]
+
+  // Relations optionnelles vers tastings
+  tastingIds   String[]    @map("tasting_ids")
+
+  // Visibilité
+  visibility   PostVisibility @default(CLUB)
+
+  // Soft delete pour modération
+  isDeleted    Boolean     @default(false) @map("is_deleted")
+  deletedBy    String?     @map("deleted_by") @db.Uuid
+  deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(6)
+
+  // Metadata
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([authorType, authorId], map: "idx_posts_author")
+  @@index([visibility], map: "idx_posts_visibility")
+  @@index([isDeleted], map: "idx_posts_is_deleted")
+  @@index([createdAt], map: "idx_posts_created")
+  @@map("posts")
+}
+
+model Comment {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  commentableType CommentableType @map("commentable_type")
+  commentableId   String       @map("commentable_id") @db.Uuid
+  content         String
+
+  // Soft delete pour modération
+  isDeleted       Boolean      @default(false) @map("is_deleted")
+  deletedBy       String?      @map("deleted_by") @db.Uuid
+  deletedAt       DateTime?    @map("deleted_at") @db.Timestamptz(6)
+
+  // Metadata
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_comments_user")
+  @@index([commentableType, commentableId], map: "idx_comments_commentable")
+  @@index([isDeleted], map: "idx_comments_is_deleted")
+  @@index([createdAt], map: "idx_comments_created")
+  @@map("comments")
+}
+
+// 🔧 ENUMS
+enum UserStatus {
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  BANNED    @map("banned")
+  DELETED   @map("deleted")
+}
+
+enum UserRole {
+  USER        @map("user")
+  MODERATOR   @map("moderator")
+  ADMIN       @map("admin")
+  SUPER_ADMIN @map("super_admin")
+}
+
+enum PlanType {
+  FREE    @map("free")
+  PREMIUM @map("premium")
+}
+
+enum ClubPlanType {
+  FREE           @map("free")
+  PREMIUM_SMALL  @map("premium_small")
+  PREMIUM_LARGE  @map("premium_large")
+}
+
+enum UserRank {
+  INITIE      @map("initie")
+  AFICIONADO  @map("aficionado")
+  CONNAISSEUR @map("connaisseur")
+}
+
+enum ClubRole {
+  PRESIDENT      @map("president")
+  VICE_PRESIDENT @map("vice_president")
+  MEMBER         @map("member")
+}
+
+enum ClubFunctionalRole {
+  TREASURER  @map("treasurer")
+  ORGANIZER  @map("organizer")
+}
+
+enum ClubMemberStatus {
+  INVITED   @map("invited")
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  LEFT      @map("left")
+}
+
+enum LocationType {
+  MEMBER_HOME @map("member_home")
+  CUSTOM      @map("custom")
+}
+
+enum AddressVisibility {
+  ALL            @map("all")
+  CONFIRMED_ONLY @map("confirmed_only")
+}
+
+enum EventVisibility {
+  MEMBERS_ONLY @map("members_only")
+  INVITED_ONLY @map("invited_only")
+  PUBLIC       @map("public")
+}
+
+enum EventStatus {
+  UPCOMING   @map("upcoming")
+  ONGOING    @map("ongoing")
+  COMPLETED  @map("completed")
+  CANCELLED  @map("cancelled")
+}
+
+enum RsvpStatus {
+  YES   @map("yes")
+  NO    @map("no")
+  MAYBE @map("maybe")
+}
+
+enum TastingVisibility {
+  PRIVATE @map("private")
+  CLUB    @map("club")
+  PUBLIC  @map("public")
+}
+
+enum AuthorType {
+  USER @map("user")
+  CLUB @map("club")
+}
+
+enum PostVisibility {
+  PRIVATE @map("private")
+  CLUB    @map("club")
+  PUBLIC  @map("public")
+}
+
+enum CommentableType {
+  EVENT   @map("event")
+  POST    @map("post")
+  TASTING @map("tasting")
+}

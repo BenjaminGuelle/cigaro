@@ -1,5 +1,13 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { Logger } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Logger,
+  BadRequestException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { UserRole } from '@cigaro/libs';
 
 export type CigaroErrorCode =
   | 'ok'
@@ -78,7 +86,6 @@ export function manageError({
                               channel = 'SYSTEM',
                               context = {}
                             }: ManageErrorArgument): never {
-
   const logger = new Logger(`ErrorManager:${channel}`);
 
   if (verbose) {
@@ -89,26 +96,74 @@ export function manageError({
 }
 
 export const ErrorManager = {
+  // ============================================================================
+  // HYBRID PATTERN - Returns NestJS Exceptions + Logging
+  // ============================================================================
 
-  userNotFound: (userId?: string, context?: any) => manageError({
-    code: 'not-found',
-    message: userId ? `User ${userId} not found` : 'User not found',
-    channel: 'USERS',
-    context
-  }),
+  // AUTH ERRORS
+  unauthenticated: (context?: string): UnauthorizedException => {
+    const logger = new Logger('AUTH');
+    logger.warn('Unauthenticated access attempt', { context });
 
-  userNotActive: (context?: any) => manageError({
-    code: 'permission-denied',
-    message: 'User account is not active',
-    channel: 'USERS',
-    context
-  }),
+    return new UnauthorizedException('Authentication required');
+  },
 
-  testDisabled: () => manageError({
-    code: 'permission-denied',
-    message: 'Test endpoints not available in production',
-    channel: 'SYSTEM'
-  }),
+  insufficientRole: (required: UserRole[], current: UserRole, context?: string): ForbiddenException => {
+    const logger = new Logger('AUTH');
+    logger.warn('Insufficient role access denied', {
+      requiredRoles: required,
+      currentRole: current,
+      context
+    });
+
+    return new ForbiddenException(
+      `Access denied. Required: ${required.join('|')}, Current: ${current}`
+    );
+  },
+
+  // USER ERRORS
+  userNotFound: (userId?: string, context?: any): NotFoundException => {
+    const logger = new Logger('USERS');
+    logger.warn('User not found', { userId, context });
+
+    const message = userId ? `User ${userId} not found` : 'User not found';
+    return new NotFoundException(message);
+  },
+
+  userNotActive: (userId?: string, context?: any): ForbiddenException => {
+    const logger = new Logger('USERS');
+    logger.warn('User not active', { userId, context });
+
+    return new ForbiddenException('User account is not active');
+  },
+
+  // VALIDATION ERRORS
+  invalidArgument: (field: string, details?: string, context?: any): BadRequestException => {
+    const logger = new Logger('SYSTEM');
+    logger.warn('Invalid argument', { field, details, context });
+
+    const message = details || `Invalid value for field: ${field}`;
+    return new BadRequestException(message);
+  },
+
+  accessDenied: (reason: string, context?: string): ForbiddenException => {
+    const logger = new Logger('AUTH');
+    logger.warn('Access denied', { reason, context });
+
+    return new ForbiddenException(`Access denied: ${reason}`);
+  },
+
+  // SYSTEM ERRORS
+  testDisabled: (): ForbiddenException => {
+    const logger = new Logger('SYSTEM');
+    logger.warn('Test endpoint accessed in production');
+
+    return new ForbiddenException('Test endpoints not available in production');
+  },
+
+  // ============================================================================
+  // LEGACY METHODS - Keep for business logic (non-Guards)
+  // ============================================================================
 
   handleError: (error: any, operation: string) => {
     const context = { operation };
@@ -153,12 +208,5 @@ export const ErrorManager = {
       channel: 'CRITICAL',
       context: { ...context, errorMessage: error.message }
     });
-  },
-
-  invalidArgument: (field: string, details?: string) => manageError({
-    code: 'invalid-argument',
-    message: details || `Invalid value for field: ${field}`,
-    channel: 'SYSTEM',
-    context: { field }
-  })
+  }
 };

@@ -1,56 +1,47 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { createClient } from '@supabase/supabase-js';
-import {
-  CompleteProfileRequest,
-  SupabaseUserModel,
-  User,
-  UserProfile,
-} from '@cigaro/libs';
-import { ClubMember } from '@prisma/client';
+import { UserModel } from '@cigaro/libs';
 
 @Injectable()
 export class AuthService {
-  private supabase;
+  constructor(private prisma: PrismaService) {}
 
-  constructor(private prisma: PrismaService) {
-    this.supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
-  }
+  // ==========================================
+  // SUPABASE AUTH METHODS
+  // ==========================================
 
-  async completeUserProfile(userId: string, data: CompleteProfileRequest): Promise<User> {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        pseudo: data.pseudo,
-        firstName: data.firstName,
-        lastName: data.lastName,
+  /**
+   * Gestion callback Supabase (OAuth + Email/Password)
+   */
+  async handleSupabaseUser(supabaseUser: any): Promise<UserModel> {
+    let user = await this.prisma.user.findUnique({
+      where: { id: supabaseUser.id }, // ID Supabase = ID utilisateur
+      include: {
+        privacySettings: true,
+        memberships: {
+          where: { status: 'ACTIVE' },
+          select: { id: true }
+        }
       }
     });
-  }
 
-  async getUserProfile(userId: string): Promise<UserProfile> {
-    const user: User & { memberships: ClubMember[] } | null = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { memberships: { where: { status: 'ACTIVE' } } }
-    });
-
-    return {
-      ...user,
-      isProfileComplete: !!user.pseudo,
-      joinedClubsCount: user.memberships.length,
-      needsProfileCompletion: !user.pseudo && !!user.firstName
-    };
-  }
-
-  async handleAuthCallback(supabaseUser: SupabaseUserModel): Promise<User> {
-    let user: User | null = await this.prisma.user.findUnique({
-      where: { id: supabaseUser.id }
-    });
-
-    if (!user) {
+    if (user) {
+      if (!user.avatarUrl && supabaseUser.user_metadata?.avatar_url) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            avatarUrl: supabaseUser.user_metadata.avatar_url
+          },
+          include: {
+            privacySettings: true,
+            memberships: {
+              where: { status: 'ACTIVE' },
+              select: { id: true }
+            }
+          }
+        });
+      }
+    } else {
       user = await this.prisma.user.create({
         data: {
           id: supabaseUser.id,
@@ -58,10 +49,33 @@ export class AuthService {
           firstName: supabaseUser.user_metadata?.first_name,
           lastName: supabaseUser.user_metadata?.last_name,
           avatarUrl: supabaseUser.user_metadata?.avatar_url,
+          rank: 'INITIE',
+          privacySettings: {
+            create: {
+              profilePublic: true,
+              emailVisible: false,
+              showRank: true,
+              showTastingsCount: true,
+              showClubs: true,
+              showLocation: false
+            }
+          }
+        },
+        include: {
+          privacySettings: true,
+          memberships: {
+            where: { status: 'ACTIVE' },
+            select: { id: true }
+          }
         }
       });
     }
 
-    return user;
+    return {
+      ...user,
+      joinedClubsCount: user.memberships.length,
+      isProfileComplete: !!(user.pseudo && user.firstName),
+      needsProfileCompletion: !user.pseudo && !!user.firstName
+    } as UserModel;
   }
 }

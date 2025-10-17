@@ -1,29 +1,89 @@
-import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  Request
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { CompleteProfileRequest, SupabaseUserModel } from '@cigaro/libs';
+import { JwtAuthGuard } from '../common/guards';
+import { UserResponse } from '../common/responses/users';
+import {
+  SerializeInterceptor,
+  Serialize
+} from '../common/interceptors/serialize.interceptor';
+
+export class SupabaseUserDto {
+  id: string;
+  email: string;
+  user_metadata?: {
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+    full_name?: string;
+  };
+  app_metadata?: {
+    provider?: string;
+    providers?: string[];
+  };
+}
+
+export class AuthCallbackDto {
+  user: SupabaseUserDto;
+  session?: any; // Supabase session data
+}
 
 @Controller('auth')
+@UseInterceptors(SerializeInterceptor)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('oauth/callback')
-  async oauthCallback(@Body() body: { supabaseUser: SupabaseUserModel }) {
-    return this.authService.handleAuthCallback(body.supabaseUser);
+  // ==========================================
+  // SUPABASE AUTH CALLBACK
+  // ==========================================
+
+  /**
+   * Callback simplifié avec juste l'user Supabase
+   * POST /auth/user
+   */
+  @Post('user')
+  @Serialize(UserResponse)
+  async handleUserSync(@Body() supabaseUser: SupabaseUserDto) {
+    return this.authService.handleSupabaseUser(supabaseUser);
   }
 
+  // ==========================================
+  // AUTHENTICATED ROUTES
+  // ==========================================
+
+  /**
+   * Vérifier le statut d'authentification
+   * GET /auth/me
+   */
+  @Get('me')
   @UseGuards(JwtAuthGuard)
-  @Get('profile')
-  async getProfile(@Request() req) {
-    return this.authService.getUserProfile(req.user.id);
+  @Serialize(UserResponse)
+  async getCurrentUser(@Request() req) {
+    return req.user;
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Post('profile/complete')
-  async completeProfile(
-    @Request() req,
-    @Body() completeProfileRequest: CompleteProfileRequest
-  ) {
-    return this.authService.completeUserProfile(req.user.id, completeProfileRequest);
+  // ==========================================
+  // HEALTH CHECK
+  // ==========================================
+
+  /**
+   * Health check pour auth service
+   * GET /auth/health
+   */
+  @Get('health')
+  async healthCheck() {
+    return {
+      status: 'ok',
+      service: 'auth',
+      supabase: 'integrated',
+      timestamp: new Date().toISOString()
+    };
   }
 }

@@ -30,11 +30,6 @@ export class SupabaseUserDto {
   };
 }
 
-export class AuthCallbackDto {
-  user: SupabaseUserDto;
-  session?: any; // Supabase session data
-}
-
 @Controller('auth')
 @UseInterceptors(SerializeInterceptor)
 export class AuthController {

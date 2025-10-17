@@ -1,4 +1,4 @@
-import { User as PrismaUser, $Enums } from '@prisma/client';
+import { User as PrismaUser, $Enums, UserPrivacySettings } from '@prisma/client';
 
 export type User = PrismaUser;
 
@@ -21,6 +21,7 @@ export interface PublicUserProfile {
   isClubMate: boolean;       // AJOUTÉ - True si dans un club commun
 }
 
+export type PrivacySettingsModel = UserPrivacySettings;
 export type UserStatus = $Enums.UserStatus;
 export type UserRole = $Enums.UserRole;
 export type UserRank = $Enums.UserRank;

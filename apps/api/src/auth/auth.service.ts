@@ -7,6 +7,7 @@ import {
   User,
   UserProfile,
 } from '@cigaro/libs';
+import { ClubMember } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -31,15 +32,15 @@ export class AuthService {
   }
 
   async getUserProfile(userId: string): Promise<UserProfile> {
-    const user = await this.prisma.user.findUnique({
+    const user: User & { memberships: ClubMember[] } | null = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { clubMembers: { where: { status: 'ACTIVE' } } }
+      include: { memberships: { where: { status: 'ACTIVE' } } }
     });
 
     return {
       ...user,
       isProfileComplete: !!user.pseudo,
-      joinedClubsCount: user.clubMembers.length,
+      joinedClubsCount: user.memberships.length,
       needsProfileCompletion: !user.pseudo && !!user.firstName
     };
   }

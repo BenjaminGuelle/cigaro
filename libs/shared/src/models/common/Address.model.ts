@@ -1,7 +1,3 @@
-export interface AddressModel {
-  address: string;
-  additional_address?: string;
-  city: string;
-  zip: string;
-  country: string; // ISO code (FR, US, etc.)
-}
+import { Address } from '@prisma/client';
+
+export type AddressModel = Address;

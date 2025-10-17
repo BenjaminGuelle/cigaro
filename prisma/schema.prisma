@@ -1,4 +1,4 @@
-// prisma/schema.prisma
+// prisma/schema.prisma - Schema Final Complet
 
 generator client {
   provider = "prisma-client-js"
@@ -10,6 +10,10 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// =============================================================================
+// CORE MODELS
+// =============================================================================
+
 model User {
   id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email       String  @unique @db.VarChar(255)
@@ -18,20 +22,15 @@ model User {
   pseudo      String? @unique @db.VarChar(50)
   avatarUrl   String? @map("avatar_url")
 
-  // Localisation (optionnelle, pour recherche clubs proximité)
-  address     Json?   @db.JsonB
-
-  // Status (remplace "active" boolean)
+  // Status et rôles
   status      UserStatus @default(ACTIVE)
-
-  // Rôle plateforme (admin système)
   userRole    UserRole @default(USER) @map("user_role")
 
-  // Abonnement SOLO (indépendant des clubs)
+  // Abonnement SOLO
   soloPlan    PlanType @default(FREE) @map("solo_plan")
   soloSubscriptionId String? @map("solo_subscription_id") @db.VarChar(255)
 
-  // 🎯 ADMIN PREMIUM FLAGS
+  // Admin premium flags
   isAdminPremium      Boolean @default(false) @map("is_admin_premium")
   adminPremiumNote    String? @map("admin_premium_note")
 
@@ -39,13 +38,18 @@ model User {
   rank        UserRank @default(INITIE)
   xp          Int      @default(0)
 
-  // Privacy
-  privacySettings Json @default("{\"profile_public\": true, \"email_visible\": false, \"show_rank\": true, \"show_tastings_count\": true, \"show_clubs\": true, \"show_location\": false}") @map("privacy_settings") @db.JsonB
+  // Relations FK vers tables centralisées
+  addressId           String? @map("address_id") @db.Uuid
+  privacySettingsId   String? @map("privacy_settings_id") @db.Uuid
 
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
+  address         Address? @relation(fields: [addressId], references: [id])
+  privacySettings UserPrivacySettings? @relation(fields: [privacySettingsId], references: [id])
+
+  // Relations inverses
   ownedClubs     Club[]          @relation("ClubOwner")
   memberships    ClubMember[]
   createdEvents  Event[]         @relation("EventCreator")
@@ -53,13 +57,14 @@ model User {
   eventRsvps     EventRsvp[]
   tastings       Tasting[]
   comments       Comment[]
+  createdCigars  Cigar[]         @relation("CigarCreator")
+  verifiedCigars Cigar[]         @relation("CigarVerifier")
 
   @@index([email])
   @@index([pseudo])
   @@index([status])
-  @@index([userRole], map: "idx_users_user_role")
-  @@index([soloPlan], map: "idx_users_solo_plan")
-  @@index([isAdminPremium], map: "idx_users_admin_premium")
+  @@index([addressId])
+  @@index([privacySettingsId])
   @@map("users")
 }
 
@@ -72,45 +77,281 @@ model Club {
   contactEmail     String?   @map("contact_email") @db.VarChar(255)
   ownerId          String    @map("owner_id") @db.Uuid
 
-  // Adresse (lieu par défaut des événements)
-  address          Json?     @db.JsonB
-
   // Abonnement CLUB
   clubPlan         ClubPlanType @default(FREE) @map("club_plan")
   clubSubscriptionId String?  @map("club_subscription_id") @db.VarChar(255)
 
-  // 🎯 ADMIN PREMIUM FLAGS
+  // Admin premium flags
   isAdminPremium   Boolean   @default(false) @map("is_admin_premium")
   adminPremiumNote String?   @map("admin_premium_note")
 
-  // Dénormalisation pour performance
+  // Métadonnées
   memberCount      Int       @default(0) @map("member_count")
-
-  // Visibilité
   invitationCode   String?   @unique @map("invitation_code") @db.VarChar(20)
   isPublic         Boolean   @default(true) @map("is_public")
-
-  // Metadata
   foundedAt        DateTime? @map("founded_at") @db.Date
-  settings         Json      @default("{}") @db.JsonB
+
+  // Relations FK vers tables centralisées
+  addressId        String?   @map("address_id") @db.Uuid
+  settingsId       String?   @map("settings_id") @db.Uuid
 
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  owner         User          @relation("ClubOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  address  Address? @relation(fields: [addressId], references: [id])
+  settings ClubSettings? @relation(fields: [settingsId], references: [id])
+  owner    User @relation("ClubOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  // Relations inverses
   members       ClubMember[]
   events        Event[]
   tastings      Tasting[]
 
-  @@index([ownerId], map: "idx_clubs_owner")
-  @@index([invitationCode], map: "idx_clubs_invitation_code")
-  @@index([isPublic], map: "idx_clubs_is_public")
-  @@index([clubPlan], map: "idx_clubs_club_plan")
-  @@index([memberCount], map: "idx_clubs_member_count")
-  @@index([isAdminPremium], map: "idx_clubs_admin_premium")
+  @@index([ownerId])
+  @@index([invitationCode])
+  @@index([isPublic])
+  @@index([clubPlan])
+  @@index([addressId])
+  @@index([settingsId])
   @@map("clubs")
 }
+
+model Event {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clubId            String    @map("club_id") @db.Uuid
+  title             String    @db.VarChar(200)
+  description       String?
+  photoUrl          String?   @map("photo_url")
+
+  // Lieu de l'événement
+  locationType      LocationType @default(CUSTOM) @map("location_type")
+  locationHostId    String?   @map("location_host_id") @db.Uuid
+  locationName      String    @map("location_name") @db.VarChar(200)
+  locationAddressId String    @map("location_address_id") @db.Uuid
+  addressVisibleTo  AddressVisibility @default(CONFIRMED_ONLY) @map("address_visible_to")
+  locationNotes     String?   @map("location_notes")
+
+  // Date et contraintes
+  eventDate         DateTime  @map("event_date") @db.Timestamptz(6)
+  durationMinutes   Int       @default(180) @map("duration_minutes")
+  maxParticipants   Int?      @map("max_participants")
+
+  // Visibilité et status
+  visibility        EventVisibility @default(MEMBERS_ONLY)
+  status            EventStatus @default(UPCOMING)
+
+  // Audit
+  createdBy         String    @map("created_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  club              Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  creator           User      @relation("EventCreator", fields: [createdBy], references: [id])
+  locationHost      User?     @relation("EventHost", fields: [locationHostId], references: [id])
+  locationAddress   Address   @relation(fields: [locationAddressId], references: [id])
+
+  // Relations inverses
+  rsvps             EventRsvp[]
+  tastings          Tasting[]
+
+  @@index([clubId])
+  @@index([eventDate])
+  @@index([status])
+  @@index([visibility])
+  @@index([createdBy])
+  @@index([locationHostId])
+  @@index([locationAddressId])
+  @@map("events")
+}
+
+// =============================================================================
+// CIGAR MODELS
+// =============================================================================
+
+model Cigar {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // Identification
+  name        String  @db.VarChar(200)        // "Siglo VI"
+  brand       String  @db.VarChar(100)        // "Cohiba"
+  line        String? @db.VarChar(100)        // "Linea Clasica", "Behike"
+  fullName    String  @db.VarChar(300)        // "Cohiba Siglo VI" (computed)
+
+  // Dimensions
+  vitola      String? @db.VarChar(100)        // "Toro", "Robusto", "Churchill"
+  length      Int?                            // 150mm
+  ringGauge   Int?    @map("ring_gauge")      // 52 (1/64 inch)
+  smokingTime Int?    @map("smoking_time")    // 90 minutes estimées
+
+  // Origine & fabrication
+  country     String? @db.VarChar(100)        // "Cuba", "Nicaragua"
+  region      String? @db.VarChar(100)        // "Vuelta Abajo", "Esteli"
+  factory     String? @db.VarChar(100)        // "El Laguito"
+
+  // Composition
+  wrapper     String? @db.VarChar(100)        // "Ecuador Connecticut"
+  binder      String? @db.VarChar(100)        // "Nicaragua"
+  filler      String? @db.VarChar(200)        // "Dominican, Nicaragua, Peru"
+
+  // Caractéristiques gustatives
+  strength    String? @db.VarChar(50)         // "Light", "Medium", "Full"
+  body        String? @db.VarChar(50)         // "Light", "Medium", "Full"
+  flavorProfile String? @map("flavor_profile") @db.VarChar(300) // "Creamy, Woody, Spicy"
+
+  // Métadonnées produit
+  year        Int?                            // 2023
+  isLimitedEdition Boolean @default(false) @map("is_limited_edition")
+  productionStatus String? @map("production_status") @db.VarChar(50) // "Active", "Discontinued"
+
+  // Prix & disponibilité
+  msrpPrice   Float?  @map("msrp_price")      // 25.50
+  currency    String? @db.VarChar(3)          // "EUR", "USD"
+  availability String? @db.VarChar(50)        // "Widely Available", "Limited", "Rare"
+
+  // Média
+  photos      String[]                        // URLs Supabase Storage
+  officialDescription String? @map("official_description")
+
+  // Statistiques communauté (dénormalisées)
+  averageRating    Float?  @default(0) @map("average_rating")     // 4.2/5
+  totalTastings    Int     @default(0) @map("total_tastings")     // 127 évaluations
+  totalUsers       Int     @default(0) @map("total_users")        // 89 users uniques
+  lastTastingAt    DateTime? @map("last_tasting_at") @db.Timestamptz(6)
+
+  // Rankings & tendances
+  popularityRank   Int?    @map("popularity_rank")     // Classement popularité
+  ratingRank       Int?    @map("rating_rank")         // Classement par note
+  trendingScore    Float?  @default(0) @map("trending_score") // Score tendance
+
+  // Modération & visibilité
+  isVerified  Boolean @default(false) @map("is_verified")  // Vérifié par admin/expert
+  isPublic    Boolean @default(true) @map("is_public")     // Visible par tous
+  verifiedBy  String? @map("verified_by") @db.Uuid         // Admin qui a vérifié
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
+
+  // Audit
+  createdBy   String  @map("created_by") @db.Uuid  // User qui a créé
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  creator     User         @relation("CigarCreator", fields: [createdBy], references: [id])
+  verifier    User?        @relation("CigarVerifier", fields: [verifiedBy], references: [id])
+  tastings    Tasting[]    // Évaluations de ce cigare
+  awards      CigarAward[] // Awards reçus
+
+  @@unique([brand, name, vitola]) // Éviter doublons
+  @@index([brand])
+  @@index([fullName])
+  @@index([country])
+  @@index([strength])
+  @@index([averageRating])
+  @@index([totalTastings])
+  @@index([popularityRank])
+  @@index([ratingRank])
+  @@index([isVerified])
+  @@index([isPublic])
+  @@index([createdBy])
+  @@index([year])
+  @@map("cigars")
+}
+
+model CigarAward {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cigarId     String     @map("cigar_id") @db.Uuid
+  awardType   AwardType  @map("award_type")
+
+  // Période de l'award
+  year        Int        // 2025
+  month       Int?       // 3 (pour monthly awards)
+  quarter     Int?       // 1 (pour quarterly awards)
+
+  // Métriques au moment de l'award
+  averageRating Float    @map("average_rating")     // 4.2 au moment de l'élection
+  totalTastings Int      @map("total_tastings")     // 127 dégustations
+  totalUsers    Int      @map("total_users")        // 89 users
+  trendingScore Float    @map("trending_score")     // Score à ce moment
+
+  // Metadata
+  isActive      Boolean  @default(true) @map("is_active") // Award actuel ou passé
+  awardedAt     DateTime @default(now()) @map("awarded_at") @db.Timestamptz(6)
+
+  // Relations
+  cigar         Cigar    @relation(fields: [cigarId], references: [id])
+
+  @@unique([awardType, year, month]) // Un seul award par période
+  @@index([cigarId])
+  @@index([awardType])
+  @@index([year, month])
+  @@index([isActive])
+  @@map("cigar_awards")
+}
+
+// =============================================================================
+// CENTRALIZED REFERENCE TABLES
+// =============================================================================
+
+model Address {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  address           String? @db.VarChar(200)
+  additionalAddress String? @map("additional_address") @db.VarChar(100)
+  city              String? @db.VarChar(100)
+  zip               String? @db.VarChar(20)
+  country           String? @db.VarChar(2)
+  label             String? @db.VarChar(100)  // "Domicile", "Siège club"
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations inverses
+  users   User[]
+  clubs   Club[]
+  events  Event[]
+
+  @@index([city])
+  @@index([country])
+  @@map("addresses")
+}
+
+model UserPrivacySettings {
+  id                 String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profilePublic      Boolean @default(true) @map("profile_public")
+  emailVisible       Boolean @default(false) @map("email_visible")
+  showRank           Boolean @default(true) @map("show_rank")
+  showTastingsCount  Boolean @default(true) @map("show_tastings_count")
+  showClubs          Boolean @default(true) @map("show_clubs")
+  showLocation       Boolean @default(false) @map("show_location")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations inverses
+  users User[]
+
+  @@map("user_privacy_settings")
+}
+
+model ClubSettings {
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  allowGuestInvites     Boolean @default(false) @map("allow_guest_invites")
+  requireEventApproval  Boolean @default(false) @map("require_event_approval")
+  autoGenerateReports   Boolean @default(true) @map("auto_generate_reports")
+  publicTastings        Boolean @default(true) @map("public_tastings")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations inverses
+  clubs Club[]
+
+  @@map("club_settings")
+}
+
+// =============================================================================
+// ASSOCIATION TABLES
+// =============================================================================
 
 model ClubMember {
   id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -126,58 +367,11 @@ model ClubMember {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clubId])
-  @@index([userId], map: "idx_club_members_user")
-  @@index([clubId], map: "idx_club_members_club")
-  @@index([role], map: "idx_club_members_role")
-  @@index([status], map: "idx_club_members_status")
+  @@index([userId])
+  @@index([clubId])
+  @@index([role])
+  @@index([status])
   @@map("club_members")
-}
-
-model Event {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  clubId            String    @map("club_id") @db.Uuid
-  title             String    @db.VarChar(200)
-  description       String?
-  photoUrl          String?   @map("photo_url")
-
-  // Lieu de l'événement
-  locationType      LocationType @default(CUSTOM) @map("location_type")
-  locationHostId    String?   @map("location_host_id") @db.Uuid
-  locationName      String    @map("location_name") @db.VarChar(200)
-  locationAddress   Json      @map("location_address") @db.JsonB
-  addressVisibleTo  AddressVisibility @default(CONFIRMED_ONLY) @map("address_visible_to")
-  locationNotes     String?   @map("location_notes")
-
-  // Date et contraintes
-  eventDate         DateTime  @map("event_date") @db.Timestamptz(6)
-  durationMinutes   Int       @default(180) @map("duration_minutes")
-  maxParticipants   Int?      @map("max_participants")
-
-  // Visibilité et status
-  visibility        EventVisibility @default(MEMBERS_ONLY)
-  status            EventStatus @default(UPCOMING)
-
-  // Relations vers RSVP (table séparée)
-  rsvps             EventRsvp[]
-  tastings          Tasting[]
-
-  // Audit
-  createdBy         String    @map("created_by") @db.Uuid
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  // Relations
-  club              Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  creator           User      @relation("EventCreator", fields: [createdBy], references: [id])
-  locationHost      User?     @relation("EventHost", fields: [locationHostId], references: [id])
-
-  @@index([clubId], map: "idx_events_club")
-  @@index([eventDate], map: "idx_events_date")
-  @@index([status], map: "idx_events_status")
-  @@index([visibility], map: "idx_events_visibility")
-  @@index([createdBy], map: "idx_events_created_by")
-  @@index([locationHostId], map: "idx_events_location_host")
-  @@map("events")
 }
 
 model EventRsvp {
@@ -193,11 +387,15 @@ model EventRsvp {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
-  @@index([eventId], map: "idx_event_rsvps_event")
-  @@index([userId], map: "idx_event_rsvps_user")
-  @@index([status], map: "idx_event_rsvps_status")
+  @@index([eventId])
+  @@index([userId])
+  @@index([status])
   @@map("event_rsvps")
 }
+
+// =============================================================================
+// CONTENT MODELS
+// =============================================================================
 
 model Tasting {
   id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -205,24 +403,18 @@ model Tasting {
   clubId      String? @map("club_id") @db.Uuid
   eventId     String? @map("event_id") @db.Uuid
 
-  // Identification cigare
-  cigarName   String  @map("cigar_name") @db.VarChar(200)
-  cigarBrand  String? @map("cigar_brand") @db.VarChar(100)
-  vitola      String? @db.VarChar(100)
+  // Relation vers Cigar (au lieu de strings)
+  cigarId     String  @map("cigar_id") @db.Uuid
 
-  // Rating avec demi-points - Float plus simple que Decimal
-  rating      Float
-
-  // Mode évaluation
+  // Évaluation
+  rating      Float   // Note /5 avec demi-points
   isExpertMode Boolean @default(false) @map("is_expert_mode")
 
-  // === MODE QUICK (toujours rempli) ===
+  // Mode QUICK (toujours rempli)
   aromas      String[] // Codes aromas basiques
   tastingNotes String? @map("tasting_notes")
 
-  // === MODE EXPERT (optionnel) ===
-
-  // Contexte
+  // Mode EXPERT (optionnel)
   smokedAt         DateTime? @map("smoked_at") @db.Timestamptz(6)
   durationMinutes  Int?      @map("duration_minutes")
   moment          String?   @db.VarChar(50)
@@ -238,7 +430,7 @@ model Tasting {
   rawSmokeTastes String[] @map("raw_smoke_tastes")
   rawSmokeAromas String[] @map("raw_smoke_aromas")
 
-  // Dégustation détaillée (grille FOIN-DIVIN-PURIN)
+  // Grille FOIN-DIVIN-PURIN
   tastesHay     String[] @map("tastes_hay")
   tastesDivine  String[] @map("tastes_divine")
   tastesManure  String[] @map("tastes_manure")
@@ -270,15 +462,16 @@ model Tasting {
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   club  Club?  @relation(fields: [clubId], references: [id], onDelete: SetNull)
   event Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  cigar Cigar  @relation(fields: [cigarId], references: [id])
 
-  @@index([userId], map: "idx_tastings_user")
-  @@index([clubId], map: "idx_tastings_club")
-  @@index([eventId], map: "idx_tastings_event")
-  @@index([cigarName], map: "idx_tastings_cigar_name")
-  @@index([rating], map: "idx_tastings_rating")
-  @@index([isExpertMode], map: "idx_tastings_mode")
-  @@index([visibility], map: "idx_tastings_visibility")
-  @@index([createdAt], map: "idx_tastings_created")
+  @@index([userId])
+  @@index([clubId])
+  @@index([eventId])
+  @@index([cigarId])
+  @@index([rating])
+  @@index([isExpertMode])
+  @@index([visibility])
+  @@index([createdAt])
   @@map("tastings")
 }
 
@@ -306,10 +499,10 @@ model Post {
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@index([authorType, authorId], map: "idx_posts_author")
-  @@index([visibility], map: "idx_posts_visibility")
-  @@index([isDeleted], map: "idx_posts_is_deleted")
-  @@index([createdAt], map: "idx_posts_created")
+  @@index([authorType, authorId])
+  @@index([visibility])
+  @@index([isDeleted])
+  @@index([createdAt])
   @@map("posts")
 }
 
@@ -332,14 +525,17 @@ model Comment {
   // Relations
   user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId], map: "idx_comments_user")
-  @@index([commentableType, commentableId], map: "idx_comments_commentable")
-  @@index([isDeleted], map: "idx_comments_is_deleted")
-  @@index([createdAt], map: "idx_comments_created")
+  @@index([userId])
+  @@index([commentableType, commentableId])
+  @@index([isDeleted])
+  @@index([createdAt])
   @@map("comments")
 }
 
-// 🔧 ENUMS
+// =============================================================================
+// ENUMS
+// =============================================================================
+
 enum UserStatus {
   ACTIVE    @map("active")
   SUSPENDED @map("suspended")
@@ -439,4 +635,12 @@ enum CommentableType {
   EVENT   @map("event")
   POST    @map("post")
   TASTING @map("tasting")
+}
+
+enum AwardType {
+  CIGAR_OF_MONTH    @map("cigar_of_month")
+  CIGAR_OF_QUARTER  @map("cigar_of_quarter")
+  CIGAR_OF_YEAR     @map("cigar_of_year")
+  TRENDING_CIGAR    @map("trending_cigar")
+  DISCOVERY_CIGAR   @map("discovery_cigar")   // Nouveau cigare qui perce
 }

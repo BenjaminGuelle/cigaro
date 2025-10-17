@@ -59,6 +59,7 @@ model User {
   comments       Comment[]
   createdCigars  Cigar[]         @relation("CigarCreator")
   verifiedCigars Cigar[]         @relation("CigarVerifier")
+  likes          Like[]
 
   @@index([email])
   @@index([pseudo])
@@ -451,6 +452,8 @@ model Tasting {
   // Media
   photos String[]
 
+  likesCount   Int         @default(0) @map("likes_count")
+
   // Visibilité
   visibility TastingVisibility @default(PRIVATE)
 
@@ -487,6 +490,8 @@ model Post {
   // Relations optionnelles vers tastings
   tastingIds   String[]    @map("tasting_ids")
 
+  likesCount   Int         @default(0) @map("likes_count")
+
   // Visibilité
   visibility   PostVisibility @default(CLUB)
 
@@ -512,6 +517,7 @@ model Comment {
   commentableType CommentableType @map("commentable_type")
   commentableId   String       @map("commentable_id") @db.Uuid
   content         String
+  likesCount   Int         @default(0) @map("likes_count")
 
   // Soft delete pour modération
   isDeleted       Boolean      @default(false) @map("is_deleted")
@@ -530,6 +536,21 @@ model Comment {
   @@index([isDeleted])
   @@index([createdAt])
   @@map("comments")
+}
+
+model Like {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  likeableType LikeableType @map("likeable_type")
+  likeableId   String       @map("likeable_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, likeableType, likeableId])
+  @@index([likeableType, likeableId])
+  @@map("likes")
 }
 
 // =============================================================================
@@ -643,4 +664,10 @@ enum AwardType {
   CIGAR_OF_YEAR     @map("cigar_of_year")
   TRENDING_CIGAR    @map("trending_cigar")
   DISCOVERY_CIGAR   @map("discovery_cigar")   // Nouveau cigare qui perce
+}
+
+enum LikeableType {
+  POST    @map("post")
+  COMMENT @map("comment")
+  TASTING @map("tasting")
 }

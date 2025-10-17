@@ -1,9 +1,27 @@
-import { Club as PrismaClub } from '@prisma/client';
+import { Club as PrismaClub, Address, ClubSettings, User, ClubMember } from '@prisma/client';
 
-export type Club = PrismaClub;
+export type ClubModel = PrismaClub;
 
-export enum ClubPlanType {
-  FREE = 'free',
-  PREMIUM_SMALL = 'premium_small',
-  PREMIUM_LARGE = 'premium_large'
+export interface ClubWithRelations extends ClubModel {
+  address?: Address | null;
+  settings?: ClubSettings | null;
+  owner?: User | null;
+  members?: ClubMember[];
+}
+
+export interface PublicClubProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  logoUrl: string | null;
+  coverPhotoUrl: string | null;
+  memberCount: number;
+  isPublic: boolean;
+  foundedAt: Date | null;
+}
+
+export interface ClubMemberView extends PublicClubProfile {
+  contactEmail: string | null;
+  address?: Address | null;     // Selon les settings du club
+  invitationCode: string | null; // Seulement pour président/vice-président
 }

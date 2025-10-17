@@ -1,21 +1,8 @@
-import { ClubMember as PrismaClubMember } from '@prisma/client';
+import { ClubMember as PrismaClubMember, User, Club } from '@prisma/client';
 
-export type ClubMember = PrismaClubMember;
+export type ClubMemberModel = PrismaClubMember;
 
-export enum ClubRole {
-  PRESIDENT = 'president',
-  VICE_PRESIDENT = 'vice_president',
-  MEMBER = 'member'
-}
-
-export enum ClubFunctionalRole {
-  TREASURER = 'treasurer',
-  ORGANIZER = 'organizer'
-}
-
-export enum ClubMemberStatus {
-  INVITED = 'invited',
-  ACTIVE = 'active',
-  SUSPENDED = 'suspended',
-  LEFT = 'left'
+export interface ClubMemberWithRelations extends ClubMemberModel {
+  user?: User | null;
+  club?: Club | null;
 }

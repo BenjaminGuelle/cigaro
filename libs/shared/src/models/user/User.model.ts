@@ -1,8 +1,14 @@
-import { User as PrismaUser, $Enums, UserPrivacySettings } from '@prisma/client';
+import { User as PrismaUser, UserPrivacySettings, Address } from '@prisma/client';
+import { UserRank, UserStatus } from '../../constants';
 
-export type User = PrismaUser;
+export type UserModel = PrismaUser;
 
-export interface UserProfile extends User {
+export interface UserWithRelations extends UserModel {
+  address?: Address | null;
+  privacySettings?: UserPrivacySettings | null;
+}
+
+export interface UserProfile extends UserWithRelations {
   isProfileComplete: boolean;
   joinedClubsCount: number;
   needsProfileCompletion: boolean;
@@ -11,18 +17,12 @@ export interface UserProfile extends User {
 export interface PublicUserProfile {
   id: string;
   pseudo: string | null;
-  firstName: string | null;  // Selon privacy_settings.profile_public
-  lastName: string | null;   // Selon privacy_settings.profile_public
+  firstName: string | null;  // Filtré selon privacySettings.profilePublic
+  lastName: string | null;   // Filtré selon privacySettings.profilePublic
   avatarUrl: string | null;
   rank: UserRank;
-  xp: number;                // Selon privacy_settings.show_rank
-  joinedClubsCount: number;  // Selon privacy_settings.show_clubs
-  status: UserStatus;        // AJOUTÉ
-  isClubMate: boolean;       // AJOUTÉ - True si dans un club commun
+  xp: number;                // Filtré selon privacySettings.showRank
+  joinedClubsCount: number;  // Filtré selon privacySettings.showClubs
+  status: UserStatus;
+  isClubMate: boolean;       // True si dans un club commun avec le viewer
 }
-
-export type PrivacySettingsModel = UserPrivacySettings;
-export type UserStatus = $Enums.UserStatus;
-export type UserRole = $Enums.UserRole;
-export type UserRank = $Enums.UserRank;
-export type PlanType = $Enums.PlanType;

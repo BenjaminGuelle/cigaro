@@ -1,6 +1,6 @@
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { USER_RANK, UserRank } from '@cigaro/libs';
+import { USER_RANK, UserRank } from '@cigaro/shared';
 
 export class GetUsersQueryDto {
   @IsOptional()

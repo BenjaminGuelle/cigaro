@@ -1,5 +1,5 @@
 import { Expose, Transform } from 'class-transformer';
-import { PlanType, UserRank, UserRole, UserStatus } from '@cigaro/libs';
+import { PlanType, UserRank, UserRole, UserStatus } from '@cigaro/shared';
 
 export class UserResponse {
   @Expose()

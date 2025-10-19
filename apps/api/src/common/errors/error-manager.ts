@@ -7,7 +7,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { UserRole } from '@cigaro/libs';
+import { UserRole } from '@cigaro/shared';
 
 export type CigaroErrorCode =
   | 'ok'

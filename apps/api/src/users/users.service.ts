@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ErrorManager } from '../common/errors/error-manager';
-import { UserModel } from '@cigaro/libs';
+import { UserModel } from '@cigaro/shared';
 import { GetUsersQueryDto } from '../common/dto/users/get-users-query.dto';
 import { CreateUserDto } from '../common/dto/users/create-user.dto';
 import { UpdateUserDto } from '../common/dto/users/update-user.dto';

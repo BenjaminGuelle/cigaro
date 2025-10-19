@@ -8,7 +8,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { USER_RANK, UserRank } from '@cigaro/libs';
+import { USER_RANK, UserRank } from '@cigaro/shared';
 
 export class CreateUserDto {
   @IsEmail({}, { message: 'Email must be a valid email address' })

@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
-import { UserModel } from '@cigaro/libs';
+import { UserModel } from '@cigaro/shared';
 
 export type SerializationGroup = 'public' | 'authenticated' | 'owner' | 'club' | 'admin';
 

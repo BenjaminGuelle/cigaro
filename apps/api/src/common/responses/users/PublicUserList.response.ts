@@ -1,5 +1,5 @@
 import { Expose, Transform } from 'class-transformer';
-import { UserRank } from '@cigaro/libs';
+import { UserRank } from '@cigaro/shared';
 
 export class PublicUserListResponse {
   @Expose()

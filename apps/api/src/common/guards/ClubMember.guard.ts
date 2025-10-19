@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ErrorManager } from '../errors/error-manager';
-import { ClubRole, CLUB_ROLE } from '@cigaro/libs';
+import { ClubRole, CLUB_ROLE } from '@cigaro/shared';
 import { ClubRole as PrismaClubRole, ClubMemberStatus as PrismaClubMemberStatus } from '@prisma/client';
 
 export interface ClubMembershipConfig {

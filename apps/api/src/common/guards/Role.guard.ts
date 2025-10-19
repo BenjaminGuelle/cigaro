@@ -5,7 +5,7 @@ import {
   SetMetadata
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserRole, USER_ROLE } from '@cigaro/libs';
+import { UserRole, USER_ROLE } from '@cigaro/shared';
 import { ErrorManager } from '../errors/error-manager';
 
 export const RequireRoles = (...roles: UserRole[]) => SetMetadata('roles', roles);

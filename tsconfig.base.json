@@ -15,8 +15,8 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@cigaro/shared": ["libs/shared/src/index.ts"],
-      "@cigaro/ng-shared": ["libs/ng-shared/src/index.ts"]
+      "@cigaro/ng-shared": ["libs/ng-shared/src/index.ts"],
+      "@cigaro/shared": ["libs/shared/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

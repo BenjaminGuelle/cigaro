@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http';
 import { firstValueFrom, catchError, retry, throwError } from 'rxjs';
-import { API_URL } from '../tokens/api.token';
+import { API_URL } from '../tokens';
 
 export interface ApiRequestOptions {
   headers?: Record<string, string>;
@@ -24,8 +24,8 @@ export class ApiError extends Error {
   providedIn: 'root'
 })
 export class ApiService {
-  private http = inject(HttpClient);
-  private apiUrl = inject(API_URL);
+  #http: HttpClient = inject(HttpClient);
+  #apiUrl: string = inject(API_URL);
 
   private buildHeaders(customHeaders?: Record<string, string>): HttpHeaders {
     return new HttpHeaders({
@@ -54,10 +54,10 @@ export class ApiService {
   }
 
   async get<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
-    const url = `${this.apiUrl}${endpoint}`;
+    const url = `${this.#apiUrl}${endpoint}`;
 
     return firstValueFrom(
-      this.http.get<T>(url, {
+      this.#http.get<T>(url, {
         headers: this.buildHeaders(options?.headers),
         params: this.buildParams(options?.params),
         withCredentials: options?.withCredentials
@@ -69,10 +69,10 @@ export class ApiService {
   }
 
   async post<T>(endpoint: string, body: any, options?: ApiRequestOptions): Promise<T> {
-    const url = `${this.apiUrl}${endpoint}`;
+    const url = `${this.#apiUrl}${endpoint}`;
 
     return firstValueFrom(
-      this.http.post<T>(url, body, {
+      this.#http.post<T>(url, body, {
         headers: this.buildHeaders(options?.headers),
         params: this.buildParams(options?.params),
         withCredentials: options?.withCredentials
@@ -84,10 +84,10 @@ export class ApiService {
   }
 
   async put<T>(endpoint: string, body: any, options?: ApiRequestOptions): Promise<T> {
-    const url = `${this.apiUrl}${endpoint}`;
+    const url = `${this.#apiUrl}${endpoint}`;
 
     return firstValueFrom(
-      this.http.put<T>(url, body, {
+      this.#http.put<T>(url, body, {
         headers: this.buildHeaders(options?.headers),
         params: this.buildParams(options?.params),
         withCredentials: options?.withCredentials
@@ -99,10 +99,10 @@ export class ApiService {
   }
 
   async patch<T>(endpoint: string, body: any, options?: ApiRequestOptions): Promise<T> {
-    const url = `${this.apiUrl}${endpoint}`;
+    const url = `${this.#apiUrl}${endpoint}`;
 
     return firstValueFrom(
-      this.http.patch<T>(url, body, {
+      this.#http.patch<T>(url, body, {
         headers: this.buildHeaders(options?.headers),
         params: this.buildParams(options?.params),
         withCredentials: options?.withCredentials
@@ -114,10 +114,10 @@ export class ApiService {
   }
 
   async delete<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
-    const url = `${this.apiUrl}${endpoint}`;
+    const url = `${this.#apiUrl}${endpoint}`;
 
     return firstValueFrom(
-      this.http.delete<T>(url, {
+      this.#http.delete<T>(url, {
         headers: this.buildHeaders(options?.headers),
         params: this.buildParams(options?.params),
         withCredentials: options?.withCredentials

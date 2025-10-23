@@ -67,8 +67,6 @@ export class AuthService {
   // ==========================================
 
   async signIn(email: string, password: string) {
-    await this.initialize();
-
     this.loading.set(true);
     this.error.set(null);
 
@@ -239,7 +237,14 @@ export class AuthService {
 
   #getSupabase(): SupabaseClient {
     if (!this.#supabase) {
-      this.#supabase = createClient(this.#config.url, this.#config.anonKey);
+      this.#supabase = createClient(this.#config.url, this.#config.anonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: 'pkce'
+        }
+      });
     }
     return this.#supabase;
   }

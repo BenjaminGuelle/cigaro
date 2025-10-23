@@ -6,20 +6,60 @@ import { SUPABASE_CONFIG, SupabaseConfig } from '../tokens';
 import { ApiClientService } from './api-client.service';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class AuthService {
-  #supabase: SupabaseClient;
+  #supabase!: SupabaseClient;
   #config: SupabaseConfig = inject(SUPABASE_CONFIG);
   #apiClient: ApiClientService = inject(ApiClientService);
+  #initialized = false;
 
   currentUser = signal<UserResponse | null>(null);
   loading = signal(false);
   error = signal<string | null>(null);
 
-  constructor() {
-    this.#supabase = createClient(this.#config.url, this.#config.anonKey);
-    this.loadUser();
+  async initialize() {
+    if (this.#initialized) return;
+
+    const supabase = this.#getSupabase();
+
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && event !== 'SIGNED_OUT') {
+        try {
+          const user = await this.#syncUserWithBackend(session.user);
+          this.currentUser.set(user);
+        } catch (error) {
+          console.error('Auth sync error:', error);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        this.currentUser.set(null);
+      }
+    });
+
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      try {
+        const user = await this.#syncUserWithBackend(data.session.user);
+        this.currentUser.set(user);
+      } catch (error) {
+        console.error('Failed to load user:', error);
+      }
+    }
+
+    this.#initialized = true;
+  }
+
+  async loadUser() {
+    const { data } = await this.#getSupabase().auth.getUser();
+    if (data.user) {
+      try {
+        const user: UserResponse = await this.#syncUserWithBackend(data.user);
+        this.currentUser.set(user);
+      } catch (error) {
+        console.error('Failed to load user:', error);
+        this.currentUser.set(null);
+      }
+    }
   }
 
   // ==========================================
@@ -27,29 +67,32 @@ export class AuthService {
   // ==========================================
 
   async signIn(email: string, password: string) {
+    await this.initialize();
+
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      const { data, error } = await this.#supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const { data, error } = await this.#getSupabase().auth.signInWithPassword(
+        {
+          email,
+          password,
+        }
+      );
 
       if (error) throw error;
 
-      const user = await this.syncUserWithBackend(data.user);
+      const user = await this.#syncUserWithBackend(data.user);
       this.currentUser.set(user);
       return { data: user, error: null };
-
     } catch (err: any) {
-      const errorMessage = err instanceof ApiError
-        ? err.message
-        : err.message || 'Erreur de connexion';
+      const errorMessage =
+        err instanceof ApiError
+          ? err.message
+          : err.message || 'Erreur de connexion';
 
       this.error.set(errorMessage);
       return { data: null, error: errorMessage };
-
     } finally {
       this.loading.set(false);
     }
@@ -60,25 +103,24 @@ export class AuthService {
     this.error.set(null);
 
     try {
-      const { data, error } = await this.#supabase.auth.signUp({
+      const { data, error } = await this.#getSupabase().auth.signUp({
         email,
-        password
+        password,
       });
 
       if (error) throw error;
 
-      const user: UserResponse = await this.syncUserWithBackend(data.user!);
+      const user: UserResponse = await this.#syncUserWithBackend(data.user!);
       this.currentUser.set(user);
       return { data: user, error: null };
-
     } catch (err: any) {
-      const errorMessage = err instanceof ApiError
-        ? err.message
-        : err.message || 'Erreur lors de l\'inscription';
+      const errorMessage =
+        err instanceof ApiError
+          ? err.message
+          : err.message || "Erreur lors de l'inscription";
 
       this.error.set(errorMessage);
       return { data: null, error: errorMessage };
-
     } finally {
       this.loading.set(false);
     }
@@ -93,22 +135,20 @@ export class AuthService {
     this.error.set(null);
 
     try {
-      const { data, error } = await this.#supabase.auth.signInWithOAuth({
+      const { data, error } = await this.#getSupabase().auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin
-        }
+          redirectTo: window.location.origin,
+        },
       });
 
       if (error) throw error;
 
       return { data, error: null };
-
     } catch (err: any) {
       const errorMessage = err.message || 'Erreur connexion Google';
       this.error.set(errorMessage);
       return { data: null, error: errorMessage };
-
     } finally {
       this.loading.set(false);
     }
@@ -119,22 +159,20 @@ export class AuthService {
     this.error.set(null);
 
     try {
-      const { data, error } = await this.#supabase.auth.signInWithOAuth({
+      const { data, error } = await this.#getSupabase().auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: window.location.origin
-        }
+          redirectTo: window.location.origin,
+        },
       });
 
       if (error) throw error;
 
       return { data, error: null };
-
     } catch (err: any) {
       const errorMessage = err.message || 'Erreur connexion Apple';
       this.error.set(errorMessage);
       return { data: null, error: errorMessage };
-
     } finally {
       this.loading.set(false);
     }
@@ -149,16 +187,16 @@ export class AuthService {
     this.error.set(null);
 
     try {
-      const { error } = await this.#supabase.auth.resetPasswordForEmail(email);
+      const { error } = await this.#getSupabase().auth.resetPasswordForEmail(
+        email
+      );
       if (error) throw error;
 
       return { success: true, error: null };
-
     } catch (err: any) {
       const errorMessage = err.message || 'Erreur lors de la réinitialisation';
       this.error.set(errorMessage);
       return { success: false, error: errorMessage };
-
     } finally {
       this.loading.set(false);
     }
@@ -172,15 +210,13 @@ export class AuthService {
     this.loading.set(true);
 
     try {
-      const { error } = await this.#supabase.auth.signOut();
+      const { error } = await this.#getSupabase().auth.signOut();
       if (error) throw error;
 
       this.currentUser.set(null);
       return { error: null };
-
     } catch (err: any) {
       return { error: err.message || 'Erreur lors de la déconnexion' };
-
     } finally {
       this.loading.set(false);
     }
@@ -201,20 +237,14 @@ export class AuthService {
     }
   }
 
-  private async syncUserWithBackend(supabaseUser: User): Promise<UserResponse> {
-    return this.#apiClient.call('auth', 'syncUser', supabaseUser);
+  #getSupabase(): SupabaseClient {
+    if (!this.#supabase) {
+      this.#supabase = createClient(this.#config.url, this.#config.anonKey);
+    }
+    return this.#supabase;
   }
 
-  private async loadUser() {
-    const { data } = await this.#supabase.auth.getUser();
-    if (data.user) {
-      try {
-        const user: UserResponse = await this.syncUserWithBackend(data.user);
-        this.currentUser.set(user);
-      } catch (error) {
-        console.error('Failed to load user:', error);
-        this.currentUser.set(null);
-      }
-    }
+  async #syncUserWithBackend(supabaseUser: User): Promise<UserResponse> {
+    return this.#apiClient.call('auth', 'syncUser', supabaseUser);
   }
 }
